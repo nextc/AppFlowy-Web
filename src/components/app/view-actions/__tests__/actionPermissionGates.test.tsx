@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 
 const mockUseViewActionPermissions = jest.fn();
 let mockWorkspaceRole = Role.Member;
+let mockCanDeleteContent = true;
 const mockDocumentView = {
   children: [],
   extra: null,
@@ -91,6 +92,10 @@ jest.mock('@/components/app/app-overlay/AppOverlayContext', () => ({
   }),
 }));
 
+jest.mock('@/components/app/contexts/AuthInternalContext', () => ({
+  useCanDeleteContent: () => mockCanDeleteContent,
+}));
+
 jest.mock('@/components/app/app.hooks', () => ({
   useAppOutline: () => [],
   useAppView: () => mockDocumentView,
@@ -133,6 +138,7 @@ describe('view action permission gates', () => {
   beforeEach(() => {
     mockUseViewActionPermissions.mockReset();
     mockWorkspaceRole = Role.Member;
+    mockCanDeleteContent = true;
   });
 
   it('keeps page duplicate available for edit access while hiding full-management actions', () => {
@@ -150,6 +156,38 @@ describe('view action permission gates', () => {
     expect(screen.queryByTestId('more-page-move-to')).toBeNull();
     expect(screen.queryByTestId('view-action-delete')).toBeNull();
     expect(screen.getByTestId('more-page-find-and-replace')).toBeTruthy();
+  });
+
+  it('shows page delete when the view is manageable and the user can delete content', () => {
+    mockCanDeleteContent = true;
+
+    render(
+      <MoreActionsContent
+        viewId='view-1'
+        canDuplicateActions
+        canManageActions
+        canUsePageHistory={false}
+        onFindAndReplace={jest.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('view-action-delete')).toBeTruthy();
+  });
+
+  it('hides page delete for non-owners even when the view is manageable', () => {
+    mockCanDeleteContent = false;
+
+    render(
+      <MoreActionsContent
+        viewId='view-1'
+        canDuplicateActions
+        canManageActions
+        canUsePageHistory={false}
+        onFindAndReplace={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId('view-action-delete')).toBeNull();
   });
 
   it('hides page duplicate when edit/create permission is denied', () => {

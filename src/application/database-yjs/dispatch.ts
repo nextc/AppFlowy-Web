@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import * as Y from 'yjs';
 
 import { calculateFieldValue } from '@/application/database-yjs/calculation';
@@ -55,6 +56,7 @@ import { useBoardLayoutSettings, useCalendarLayoutSetting, useFieldType } from '
 import { deleteCollabDB } from '@/application/db';
 import { deleteOutboxByObjectId } from '@/application/sync-outbox';
 import { executeOperations } from '@/application/slate-yjs/utils/yjs';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import {
   DatabaseViewLayout,
   DateFormat,
@@ -393,8 +395,16 @@ export function useDeleteGroupColumnDispatch(groupId: string, columnId: string, 
     return [FieldType.SingleSelect, FieldType.MultiSelect].includes(fieldType);
   }, [fieldType]);
 
+  const canDelete = useCanDeleteContent();
+
   return useCallback(
     (rowIds?: string[]) => {
+      // SECURITY: deleting content is Owner-only; Members may edit but not delete.
+      if (!canDelete) {
+        toast.error('Only workspace owners can delete');
+        return;
+      }
+
       if (isSelectField) {
         // Delete the group column
         deleteGroupColumn();
@@ -408,7 +418,7 @@ export function useDeleteGroupColumnDispatch(groupId: string, columnId: string, 
         deleteRows(rowIds);
       }
     },
-    [isSelectField, deleteGroupColumn, deleteSelectOption, columnId, deleteRows]
+    [isSelectField, deleteGroupColumn, deleteSelectOption, columnId, deleteRows, canDelete]
   );
 }
 
@@ -693,9 +703,16 @@ export function useMoveCardDispatch() {
 export function useDeleteRowDispatch() {
   const database = useDatabase();
   const sharedRoot = useSharedRoot();
+  const canDelete = useCanDeleteContent();
 
   return useCallback(
     (rowId: string) => {
+      // SECURITY: deleting content is Owner-only; Members may edit but not delete.
+      if (!canDelete) {
+        toast.error('Only workspace owners can delete');
+        return;
+      }
+
       executeOperationWithAllViews(
         sharedRoot,
         database,
@@ -719,16 +736,23 @@ export function useDeleteRowDispatch() {
       void deleteOutboxByObjectId(rowId);
       void deleteCollabDB(rowId, { destroyDoc: false });
     },
-    [sharedRoot, database]
+    [sharedRoot, database, canDelete]
   );
 }
 
 export function useBulkDeleteRowDispatch() {
   const database = useDatabase();
   const sharedRoot = useSharedRoot();
+  const canDelete = useCanDeleteContent();
 
   return useCallback(
     (rowIds: string[]) => {
+      // SECURITY: deleting content is Owner-only; Members may edit but not delete.
+      if (!canDelete) {
+        toast.error('Only workspace owners can delete');
+        return;
+      }
+
       executeOperationWithAllViews(
         sharedRoot,
         database,
@@ -759,7 +783,7 @@ export function useBulkDeleteRowDispatch() {
         void deleteCollabDB(rowId, { destroyDoc: false });
       });
     },
-    [sharedRoot, database]
+    [sharedRoot, database, canDelete]
   );
 }
 
@@ -1177,9 +1201,16 @@ export function useDeletePropertyDispatch() {
   const database = useDatabase();
   const sharedRoot = useSharedRoot();
   const { databaseDoc, getViewIdFromDatabaseId, loadView, bindViewSync } = useDatabaseContext();
+  const canDelete = useCanDeleteContent();
 
   return useCallback(
     (fieldId: string) => {
+      // SECURITY: deleting content is Owner-only; Members may edit but not delete.
+      if (!canDelete) {
+        toast.error('Only workspace owners can delete');
+        return;
+      }
+
       const field = database.get(YjsDatabaseKey.fields)?.get(fieldId);
       const fieldType = Number(field?.get(YjsDatabaseKey.type));
       const relationOption = field && fieldType === FieldType.Relation ? parseRelationTypeOption(field) : null;
@@ -1233,7 +1264,7 @@ export function useDeletePropertyDispatch() {
         bindViewSync,
       });
     },
-    [bindViewSync, database, databaseDoc, getViewIdFromDatabaseId, loadView, sharedRoot]
+    [bindViewSync, database, databaseDoc, getViewIdFromDatabaseId, loadView, sharedRoot, canDelete]
   );
 }
 
@@ -2918,9 +2949,16 @@ export function useReorderSelectFieldOptions(fieldId: string) {
 export function useDeleteSelectOption(fieldId: string) {
   const database = useDatabase();
   const sharedRoot = useSharedRoot();
+  const canDelete = useCanDeleteContent();
 
   return useCallback(
     (optionId: string) => {
+      // SECURITY: deleting content is Owner-only; Members may edit but not delete.
+      if (!canDelete) {
+        toast.error('Only workspace owners can delete');
+        return;
+      }
+
       const field = database.get(YjsDatabaseKey.fields)?.get(fieldId);
 
       if (!field) {
@@ -3018,7 +3056,7 @@ export function useDeleteSelectOption(fieldId: string) {
         'deleteSelectOptionFromGroup'
       );
     },
-    [database, fieldId, sharedRoot]
+    [database, fieldId, sharedRoot, canDelete]
   );
 }
 

@@ -11,6 +11,7 @@ import { ReactComponent as DuplicateIcon } from '@/assets/icons/duplicate.svg';
 import { ReactComponent as ExpandIcon } from '@/assets/icons/full_screen.svg';
 import { ReactComponent as MoreIcon } from '@/assets/icons/more.svg';
 import { AFScroller } from '@/components/_shared/scroller';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { DatabaseRow } from '@/components/database/DatabaseRow';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,6 +38,7 @@ function DatabaseRowModal({
   const context = useDatabaseContextOptional();
   const openPageModalViewId = context?.openPageModalViewId;
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
   const duplicateRow = useDuplicateRowDispatch();
   const deleteRow = useDeleteRowDispatch();
   const [duplicateLoading, setDuplicateLoading] = useState(false);
@@ -128,17 +130,19 @@ function DatabaseRowModal({
 
                   {t('grid.row.duplicate')}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant={'destructive'}
-                  data-testid='row-detail-delete'
-                  onSelect={() => {
-                    deleteRow?.(rowId);
-                    onOpenChange(false);
-                  }}
-                >
-                  <DeleteIcon className={'h-5 w-5'} />
-                  {t('grid.row.delete')}
-                </DropdownMenuItem>
+                {canDelete && (
+                  <DropdownMenuItem
+                    variant={'destructive'}
+                    data-testid='row-detail-delete'
+                    onSelect={() => {
+                      deleteRow?.(rowId);
+                      onOpenChange(false);
+                    }}
+                  >
+                    <DeleteIcon className={'h-5 w-5'} />
+                    {t('grid.row.delete')}
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>

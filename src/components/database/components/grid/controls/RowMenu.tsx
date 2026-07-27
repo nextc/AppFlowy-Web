@@ -5,6 +5,7 @@ import { ReactComponent as UpIcon } from '@/assets/icons/arrow_up.svg';
 import { ReactComponent as DeleteIcon } from '@/assets/icons/delete.svg';
 import { ReactComponent as DuplicateIcon } from '@/assets/icons/duplicate.svg';
 import { ReactComponent as PlusIcon } from '@/assets/icons/plus.svg';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import DeleteRowConfirm from '@/components/database/components/database-row/DeleteRowConfirm';
 import { useHoverControlsActions } from '@/components/database/components/grid/controls/HoverControls.hooks';
 import { useHoverControlsContext } from '@/components/database/components/grid/controls/HoverControlsContext';
@@ -13,6 +14,7 @@ import { Progress } from '@/components/ui/progress';
 
 function RowMenu({ rowId, onClose }: { rowId: string; onClose: () => void }) {
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
   const { onAddRowBelow, onDuplicateRow, onAddRowAbove, addAboveLoading, addBelowLoading, duplicateLoading } =
     useHoverControlsActions(rowId);
 
@@ -48,17 +50,22 @@ function RowMenu({ rowId, onClose }: { rowId: string; onClose: () => void }) {
         loading: duplicateLoading,
         onSelect: onDuplicateRow,
       },
-      {
-        label: t('grid.row.delete'),
-        icon: DeleteIcon,
-        onSelect: () => {
-          setOpenDeleteConfirmed(true);
-          onClose();
-        },
-      },
+      ...(canDelete
+        ? [
+            {
+              label: t('grid.row.delete'),
+              icon: DeleteIcon,
+              onSelect: () => {
+                setOpenDeleteConfirmed(true);
+                onClose();
+              },
+            },
+          ]
+        : []),
     ],
     [
       t,
+      canDelete,
       addAboveLoading,
       addBelowLoading,
       duplicateLoading,

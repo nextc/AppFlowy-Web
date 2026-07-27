@@ -20,6 +20,7 @@ import {
   useCurrentWorkspaceId,
   useLoadViewChildren,
 } from '@/components/app/app.hooks';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { useSyncInternal } from '@/components/app/contexts/SyncInternalContext';
 import MovePagePopover from '@/components/app/view-actions/MovePagePopover';
 import { DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -49,6 +50,7 @@ function MoreActionsContent({
   isLoadingActions?: boolean;
 }) {
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
   const { openDeleteModal, showBlockingLoader, hideBlockingLoader } = useAppOverlayContext();
   const workspaceId = useCurrentWorkspaceId();
   const view = useAppView(viewId);
@@ -214,7 +216,7 @@ function MoreActionsContent({
         </DropdownMenuItem>
       )}
 
-      {canManageActions && (
+      {canManageActions && canDelete && (
         <DropdownMenuItem
           data-testid='view-action-delete'
           variant={'destructive'}

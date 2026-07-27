@@ -6,6 +6,7 @@ import { useToggleHiddenGroupColumnDispatch } from '@/application/database-yjs/d
 import { ReactComponent as DeleteIcon } from '@/assets/icons/delete.svg';
 import { ReactComponent as EditIcon } from '@/assets/icons/edit.svg';
 import { ReactComponent as HideIcon } from '@/assets/icons/hide.svg';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import ColumnDeleteConfirm from '@/components/database/components/board/column/ColumnDeleteConfirm';
 import ColumnRename from '@/components/database/components/board/column/ColumnRename';
 import { dropdownMenuItemVariants } from '@/components/ui/dropdown-menu';
@@ -35,6 +36,7 @@ export function ColumnMenu({
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const toggleHidden = useToggleHiddenGroupColumnDispatch(groupId, fieldId);
+  const canDelete = useCanDeleteContent();
 
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -57,7 +59,7 @@ export function ColumnMenu({
           toggleHidden(id, true);
         },
       },
-      deleteEnabled && {
+      deleteEnabled && canDelete && {
         key: 'delete',
         label: t('board.column.deleteColumn'),
         Icon: DeleteIcon,
@@ -74,7 +76,7 @@ export function ColumnMenu({
       variant?: 'destructive';
       onClick: () => void;
     }[];
-  }, [deleteEnabled, hideEnabled, id, renameEnabled, t, toggleHidden]);
+  }, [deleteEnabled, canDelete, hideEnabled, id, renameEnabled, t, toggleHidden]);
 
   const tooltipContent = useMemo(() => {
     const content = [];

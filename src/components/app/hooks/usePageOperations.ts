@@ -83,8 +83,10 @@ export function usePageOperations({
 
       const shareWithMeView = findViewInShareWithMe(outlineRef.current || [], id);
 
-      if (role === Role.Guest || shareWithMeView) {
-        throw new Error('Guest cannot delete pages');
+      // SECURITY: deleting content is Owner-only; Members may edit but not delete (mirrors server guard).
+      if (role !== Role.Owner || shareWithMeView) {
+        toast.error('Only workspace owners can delete pages');
+        throw new Error('Only workspace owners can delete pages');
       }
 
       try {
@@ -223,6 +225,12 @@ export function usePageOperations({
         throw new Error('No workspace or service found');
       }
 
+      // SECURITY: permanently deleting from trash is Owner-only (mirrors server guard).
+      if (role !== Role.Owner) {
+        toast.error('Only workspace owners can permanently delete');
+        throw new Error('Only workspace owners can permanently delete');
+      }
+
       try {
         // Collect view IDs to clear from IndexedDB cache
         let viewIdsToClear: string[] = [];
@@ -251,7 +259,7 @@ export function usePageOperations({
         return Promise.reject(e);
       }
     },
-    [currentWorkspaceId, loadOutline]
+    [currentWorkspaceId, loadOutline, role]
   );
 
   // Restore page from trash

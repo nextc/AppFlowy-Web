@@ -14,6 +14,7 @@ import { ReactComponent as ExpandMoreIcon } from '@/assets/icons/full_screen.svg
 import DeleteRowConfirm from '@/components/database/components/database-row/DeleteRowConfirm';
 import RowPropertyPrimitive from '@/components/database/components/database-row/RowPropertyPrimitive';
 import { useAIEnabled } from '@/components/app/app.hooks';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { EventTitle } from '@/components/database/fullcalendar/event/EventTitle';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -31,6 +32,7 @@ function EventPopoverContent({
   onGotoDate: (date: Date) => void;
 }) {
   const readOnly = useReadOnly();
+  const canDelete = useCanDeleteContent();
   const primaryFieldId = usePrimaryFieldId();
   const { setOpenEventRowId, markEventAsNew, markEventAsUpdate } = useEventContext();
   const duplicateRowDispatch = useDuplicateRowDispatch();
@@ -110,7 +112,7 @@ function EventPopoverContent({
           </Tooltip>
         )}
         {/* Delete button */}
-        {!readOnly && (
+        {!readOnly && canDelete && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button data-testid='calendar-event-delete' variant='ghost' size='icon' className='hover:text-text-error' onClick={handleDelete}>
