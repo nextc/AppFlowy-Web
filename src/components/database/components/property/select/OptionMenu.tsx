@@ -5,6 +5,7 @@ import { SelectOption, SelectOptionColor, useDatabaseContext } from '@/applicati
 import { useDeleteSelectOption, useUpdateSelectOption } from '@/application/database-yjs/dispatch';
 import { ReactComponent as DeleteIcon } from '@/assets/icons/delete.svg';
 import { ColorTile } from '@/components/_shared/color-picker';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { useSubscriptionPlan } from '@/components/app/hooks/useSubscriptionPlan';
 import { SelectOptionColorMap } from '@/components/database/components/cell/cell.const';
 import {
@@ -32,6 +33,7 @@ function OptionMenu({
 }) {
   const { getSubscriptions } = useDatabaseContext();
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
 
   const onDelete = useDeleteSelectOption(fieldId);
   const onUpdate = useUpdateSelectOption(fieldId);
@@ -247,25 +249,29 @@ function OptionMenu({
           </div>
         </DropdownMenuGroup>
 
-        <DropdownMenuSeparator className='my-2' />
+        {canDelete && (
+          <>
+            <DropdownMenuSeparator className='my-2' />
 
-        <DropdownMenuItem
-          variant={'destructive'}
-          onSelect={() => {
-            onDelete(option.id);
-          }}
-          className='mx-1.5 mb-1.5'
-          {...(editing
-            ? {
-              onPointerMove: (e) => e.preventDefault(),
-              onPointerEnter: (e) => e.preventDefault(),
-              onPointerLeave: (e) => e.preventDefault(),
-            }
-            : undefined)}
-        >
-          <DeleteIcon />
-          {t('grid.selectOption.deleteTag')}
-        </DropdownMenuItem>
+            <DropdownMenuItem
+              variant={'destructive'}
+              onSelect={() => {
+                onDelete(option.id);
+              }}
+              className='mx-1.5 mb-1.5'
+              {...(editing
+                ? {
+                  onPointerMove: (e) => e.preventDefault(),
+                  onPointerEnter: (e) => e.preventDefault(),
+                  onPointerLeave: (e) => e.preventDefault(),
+                }
+                : undefined)}
+            >
+              <DeleteIcon />
+              {t('grid.selectOption.deleteTag')}
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

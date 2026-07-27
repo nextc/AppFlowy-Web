@@ -6,6 +6,7 @@ import { ReactComponent as DeleteIcon } from '@/assets/icons/delete.svg';
 import { ReactComponent as DuplicateIcon } from '@/assets/icons/duplicate.svg';
 import { ReactComponent as EditIcon } from '@/assets/icons/edit.svg';
 import { ReactComponent as MoreIcon } from '@/assets/icons/more.svg';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { DeleteRowConfirm } from '@/components/database/components/database-row/DeleteRowConfirm';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +21,7 @@ import { cn } from '@/lib/utils';
 
 function CardToolbar({ onEdit, visible, rowId }: { rowId: string; visible: boolean; onEdit: () => void }) {
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
   const onDuplicate = useDuplicateRowDispatch();
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
@@ -83,17 +85,19 @@ function CardToolbar({ onEdit, visible, rowId }: { rowId: string; visible: boole
               {t('button.duplicate')}
             </DropdownMenuItem>
           </DropdownMenuGroup>
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              onSelect={() => {
-                setDeleteConfirm(true);
-              }}
-              variant={'destructive'}
-            >
-              <DeleteIcon />
-              {t('button.delete')}
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
+          {canDelete && (
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setDeleteConfirm(true);
+                }}
+                variant={'destructive'}
+              >
+                <DeleteIcon />
+                {t('button.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {deleteConfirm && (

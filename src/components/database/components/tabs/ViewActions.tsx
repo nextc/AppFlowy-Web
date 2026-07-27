@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { View } from '@/application/types';
 import { ReactComponent as DeleteIcon } from '@/assets/icons/delete.svg';
 import { ReactComponent as EditIcon } from '@/assets/icons/edit.svg';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
 export function DatabaseViewActions({
@@ -17,6 +18,7 @@ export function DatabaseViewActions({
   onOpenDeleteModal: (viewId: string) => void;
 }) {
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
 
   return (
     <DropdownMenuGroup>
@@ -29,17 +31,19 @@ export function DatabaseViewActions({
         <EditIcon />
         {t('button.rename')}
       </DropdownMenuItem>
-      <DropdownMenuItem
-        data-testid="database-view-action-delete"
-        disabled={deleteDisabled}
-        variant={'destructive'}
-        onSelect={() => {
-          onOpenDeleteModal(view.view_id);
-        }}
-      >
-        <DeleteIcon />
-        {t('button.delete')}
-      </DropdownMenuItem>
+      {canDelete && (
+        <DropdownMenuItem
+          data-testid="database-view-action-delete"
+          disabled={deleteDisabled}
+          variant={'destructive'}
+          onSelect={() => {
+            onOpenDeleteModal(view.view_id);
+          }}
+        >
+          <DeleteIcon />
+          {t('button.delete')}
+        </DropdownMenuItem>
+      )}
     </DropdownMenuGroup>
   );
 }

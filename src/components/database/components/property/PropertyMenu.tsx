@@ -12,6 +12,7 @@ import { ReactComponent as DeleteIcon } from '@/assets/icons/delete.svg';
 import { ReactComponent as DuplicateIcon } from '@/assets/icons/duplicate.svg';
 import { ReactComponent as HideIcon } from '@/assets/icons/hide.svg';
 import { ReactComponent as ShowIcon } from '@/assets/icons/show.svg';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import DataTimePropertyMenuContent from '@/components/database/components/property/date/DataTimePropertyMenuContent';
 import DeletePropertyConfirm from '@/components/database/components/property/DeletePropertyConfirm';
 import FileMediaPropertyMenuContent from '@/components/database/components/property/media/FileMediaPropertyMenuContent';
@@ -53,6 +54,7 @@ function PropertyMenu({
   const isEditingDisabled = isFieldEditingDisabled(type);
   const isPrimary = field?.get(YjsDatabaseKey.is_primary);
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const operations = useMemo(
     () => [
@@ -76,17 +78,21 @@ function PropertyMenu({
           onDuplicateProperty(fieldId);
         },
       },
-      {
-        label: t('grid.field.delete'),
-        icon: <DeleteIcon />,
-        disabled: isPrimary,
-        variant: 'destructive',
-        onSelect: () => {
-          setDeleteConfirmOpen(true);
-        },
-      },
+      ...(canDelete
+        ? [
+            {
+              label: t('grid.field.delete'),
+              icon: <DeleteIcon />,
+              disabled: isPrimary,
+              variant: 'destructive',
+              onSelect: () => {
+                setDeleteConfirmOpen(true);
+              },
+            },
+          ]
+        : []),
     ],
-    [visibility, t, isPrimary, onHideProperty, fieldId, onShowProperty, onDuplicateProperty]
+    [visibility, t, isPrimary, canDelete, onHideProperty, fieldId, onShowProperty, onDuplicateProperty]
   );
 
   const propertyContent = useMemo(() => {

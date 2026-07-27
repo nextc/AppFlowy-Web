@@ -10,6 +10,7 @@ import { ReactComponent as MoveToIcon } from '@/assets/icons/move_to.svg';
 import { findView } from '@/components/_shared/outline/utils';
 import { useAppOverlayContext } from '@/components/app/app-overlay/AppOverlayContext';
 import { useAppHandlers, useAppOutline, useAppView, useCurrentWorkspaceId } from '@/components/app/app.hooks';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { useSyncInternal } from '@/components/app/contexts/SyncInternalContext';
 import MovePagePopover from '@/components/app/view-actions/MovePagePopover';
 import { useService } from '@/components/main/app.hooks';
@@ -22,6 +23,7 @@ function MoreActionsContent({ itemClicked, viewId }: {
   viewId: string;
 }) {
   const { t } = useTranslation();
+  const canDelete = useCanDeleteContent();
   const {
     openDeleteModal,
     showBlockingLoader,
@@ -105,17 +107,18 @@ function MoreActionsContent({ itemClicked, viewId }: {
       </MovePagePopover>
       }
 
-      <DropdownMenuItem
-        data-testid="view-action-delete"
-        variant={'destructive'}
-        onSelect={() => {
-          openDeleteModal(viewId);
-        }}
-      >
-        <DeleteIcon />
-        {t('button.delete')}
-      </DropdownMenuItem>
-
+      {canDelete && (
+        <DropdownMenuItem
+          data-testid="view-action-delete"
+          variant={'destructive'}
+          onSelect={() => {
+            openDeleteModal(viewId);
+          }}
+        >
+          <DeleteIcon />
+          {t('button.delete')}
+        </DropdownMenuItem>
+      )}
     </DropdownMenuGroup>
   );
 }
