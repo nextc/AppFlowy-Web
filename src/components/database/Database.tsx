@@ -63,6 +63,12 @@ export interface Database2Props {
   databaseName: string;
   rowId?: string;
   modalRowId?: string;
+  /**
+   * Notify when the row-detail modal opens (rowId) or closes (null) for a row of
+   * this database, so the host can mirror the open card into the URL for sharing.
+   * Cross-database modals (opened with an explicit viewId) are not reported.
+   */
+  onModalRowIdChange?: (rowId: string | null) => void;
   appendBreadcrumb?: AppendBreadcrumb;
   onChangeView: (viewId: string) => void;
   onViewAdded?: (viewId: string) => void;
@@ -133,6 +139,7 @@ function Database(props: Database2Props) {
     createRowDocument,
     navigateToView,
     modalRowId,
+    onModalRowIdChange,
     isDocumentBlock: _isDocumentBlock,
     embeddedHeight,
     onViewIdsChanged,
@@ -486,8 +493,13 @@ function Database(props: Database2Props) {
       }
 
       setModalState((prev) => ({ ...prev, rowId }));
+      // Only same-database opens are URL-synced — a viewId fall-through here means a
+      // cross-database row, whose link can't be reconstructed from this page's URL.
+      if (!viewId) {
+        onModalRowIdChange?.(rowId);
+      }
     },
-    [createNewRow, loadView, navigateToView, onOpenRowPage, readOnly]
+    [createNewRow, loadView, navigateToView, onOpenRowPage, readOnly, onModalRowIdChange]
   );
 
   const handleCloseRowModal = useCallback(() => {
@@ -497,7 +509,31 @@ function Database(props: Database2Props) {
       databaseDoc: null,
       rowMap: null,
     });
-  }, []);
+    onModalRowIdChange?.(null);
+  }, [onModalRowIdChange]);
+
+  // Mirror URL-driven changes of modalRowId (back/forward, in-app link clicks) into
+  // modal state. Reacts only to changes of the param — not param/state mismatch — so
+  // cross-database modals, which are never URL-synced, aren't force-closed by an
+  // absent param.
+  const prevModalRowIdRef = useRef(modalRowId);
+
+  useEffect(() => {
+    const prev = prevModalRowIdRef.current;
+
+    prevModalRowIdRef.current = modalRowId;
+    if (modalRowId === prev) return;
+
+    if (modalRowId) {
+      setModalState((state) =>
+        state.rowId === modalRowId
+          ? state
+          : { rowId: modalRowId, viewId: activeViewId, databaseDoc: null, rowMap: null }
+      );
+    } else {
+      setModalState((state) => (state.rowId ? { rowId: null, viewId: null, databaseDoc: null, rowMap: null } : state));
+    }
+  }, [modalRowId, activeViewId]);
 
   // Memoized callback for modal open change to avoid inline function in JSX
   const handleModalOpenChange = useCallback(

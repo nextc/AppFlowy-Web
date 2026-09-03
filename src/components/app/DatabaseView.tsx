@@ -80,8 +80,33 @@ function DatabaseView(props: DatabaseViewProps) {
     (rowId: string) => {
       setSearch((prev) => {
         prev.set('r', rowId);
+        // Full-page row supersedes the modal deep link (e.g. expand from the modal).
+        prev.delete('r-modal');
         return prev;
       });
+    },
+    [setSearch]
+  );
+
+  // Mirror the open card into the URL so it can be copied/shared. Reads params from
+  // window.location instead of the hook's snapshot: the modal's expand button pushes
+  // `r` and clears the modal in the same tick, and the hook snapshot would be stale
+  // for the second update, clobbering `r`.
+  const handleModalRowIdChange = useCallback(
+    (rowId: string | null) => {
+      const params = new URLSearchParams(window.location.search);
+
+      if (rowId) {
+        if (params.get('r-modal') === rowId) return;
+        params.set('r-modal', rowId);
+        // Push, so the browser back button closes the card again.
+        setSearch(params);
+      } else {
+        if (!params.has('r-modal')) return;
+        params.delete('r-modal');
+        // Replace, so the back button doesn't reopen a card the user just closed.
+        setSearch(params, { replace: true });
+      }
     },
     [setSearch]
   );
@@ -257,6 +282,7 @@ function DatabaseView(props: DatabaseViewProps) {
         onChangeView={handleChangeView}
         onOpenRowPage={handleNavigateToRow}
         modalRowId={modalRowId}
+        onModalRowIdChange={handleModalRowIdChange}
         visibleViewIds={visibleViewIds}
       />
     </div>

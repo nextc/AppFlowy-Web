@@ -11,7 +11,10 @@ import { cn } from '@/lib/utils';
 
 export function DatabaseRowProperties({ rowId }: { rowId: string }) {
   const primaryFieldId = usePrimaryFieldId();
-  const [isFilterHidden, setIsFilterHidden] = useState(true);
+  // Fork default: show hidden fields expanded in the row detail (upstream collapses
+  // them behind the "Show N hidden fields" toggle). Replaces the nginx Patch 5
+  // sub_filter rewrite that flipped this constant in the served 0.9.93 chunk.
+  const [isFilterHidden, setIsFilterHidden] = useState(false);
   const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
 
   const { properties, hiddenProperties } = usePropertiesSelector(isFilterHidden);
