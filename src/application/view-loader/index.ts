@@ -10,6 +10,7 @@
  * before the component finishes rendering.
  */
 
+import { seedRowDocCacheFromPageData } from '@/application/database-blob';
 import { openCollabDB } from '@/application/db';
 import { getOrCreateRowSubDoc, hasCollabCache } from '@/application/services/js-services/cache';
 import { fetchPageCollab } from '@/application/services/js-services/fetch';
@@ -121,6 +122,21 @@ async function fetchAndApply(workspaceId: string, viewId: string, doc: YDoc): Pr
   });
 
   applyYDoc(doc, data);
+
+  // Seed row docs from the page-view payload so board/grid cells render without
+  // waiting on per-row WebSocket sync — the bulk path when the backend has no
+  // blob/diff endpoint (see seedRowDocCacheFromPageData).
+  if (rows && Object.keys(rows).length > 0) {
+    try {
+      const databaseId = getDatabaseIdFromDoc(doc);
+
+      if (databaseId) {
+        seedRowDocCacheFromPageData(databaseId, rows);
+      }
+    } catch (error) {
+      Log.warn('[ViewLoader] failed to seed row docs from page data', { viewId, error });
+    }
+  }
 }
 
 // ============================================================================

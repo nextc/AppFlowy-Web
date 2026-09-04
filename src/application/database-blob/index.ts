@@ -106,6 +106,58 @@ function cacheRowDocSeed(rowKey: string, docState?: database_blob.ICollabDocStat
   }
 }
 
+/**
+ * Seed the row-doc caches from a page-view fetch — the `row_data` map returned by
+ * `GET /api/workspace/{w}/page-view/{viewId}` (raw Yjs doc_state per row, encoder v1).
+ *
+ * EXTERNAL: fallback for backends without the `database/{id}/blob/diff` endpoint
+ * (AppFlowy-Cloud 0.9.64 serves page-view row_data but 404s blob/diff). Without a
+ * seed source, every row hydrates one-by-one over WebSocket on first load, which
+ * leaves boards showing "Untitled" cards for a long time.
+ */
+export function seedRowDocCacheFromPageData(databaseId: string, rows: Record<string, number[] | Uint8Array>) {
+  let seeded = 0;
+  let appliedToCached = 0;
+
+  for (const [rowId, raw] of Object.entries(rows)) {
+    if (!raw || raw.length === 0) continue;
+
+    const rowKey = getRowKey(databaseId, rowId);
+    const seed: RowDocSeed = {
+      bytes: raw instanceof Uint8Array ? raw : new Uint8Array(raw),
+      encoderVersion: 1,
+    };
+
+    if (applySeedToCachedDoc(rowKey, seed)) {
+      appliedToCached += 1;
+      continue;
+    }
+
+    rowDocSeedLookup.set(rowKey, seed);
+    trimRowDocSeedLookup();
+
+    rowDocSeedCache.set(rowKey, seed);
+    while (rowDocSeedCache.size > MAX_ROW_DOC_SEEDS) {
+      const oldestKey = rowDocSeedCache.keys().next().value;
+
+      if (!oldestKey) break;
+      rowDocSeedCache.delete(oldestKey);
+    }
+
+    seeded += 1;
+  }
+
+  Log.debug('[Database] page-data seed cache prepared', {
+    databaseId,
+    seeded,
+    appliedToCached,
+    cacheSize: rowDocSeedCache.size,
+    lookupSize: rowDocSeedLookup.size,
+  });
+
+  return { seeded, appliedToCached };
+}
+
 export function takeDatabaseRowDocSeed(rowKey: string): RowDocSeed | null {
   const cachedSeed = rowDocSeedCache.get(rowKey);
 
