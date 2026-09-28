@@ -37,7 +37,7 @@ import { createRelationField } from '@/application/database-yjs/fields/relation/
 import { createRollupField } from '@/application/database-yjs/fields/rollup/utils';
 import { createSelectOptionCell } from '@/application/database-yjs/fields/select-option/utils';
 import { createDateTimeField } from '@/application/database-yjs/fields/text/utils';
-import { dateFilterFillData, filterFillData, getDefaultFilterCondition } from '@/application/database-yjs/filter';
+import { getDefaultFilterCondition } from '@/application/database-yjs/filter';
 import { getOptionsFromRow, initialDatabaseRow } from '@/application/database-yjs/row';
 import { generateRowMeta, getMetaIdMap, getMetaJSON, getRowKey } from '@/application/database-yjs/row_meta';
 import { useBoardLayoutSettings, useCalendarLayoutSetting, useDatabaseViewLayout, useFieldSelector, useFieldType } from '@/application/database-yjs/selector';
@@ -1279,9 +1279,11 @@ export function useNewRowDispatch() {
 
         const cells = row.get(YjsDatabaseKey.cells);
 
+        // Filters are deliberately NOT copied into new rows' cells (upstream does, which
+        // silently auto-assigned members on filtered boards). A new row that doesn't match
+        // the active filter is hidden from this view until edited.
         if (filters) {
           filters.toArray().forEach((filter) => {
-            const cell = new Y.Map() as YDatabaseCell;
             const fieldId = filter.get(YjsDatabaseKey.field_id);
             const field = database.get(YjsDatabaseKey.fields)?.get(fieldId);
 
@@ -1289,43 +1291,14 @@ export function useNewRowDispatch() {
               return;
             }
 
-            if (isCalendar && calendarSetting?.fieldId === fieldId) {
-              shouldOpenRowModal = true;
-            }
-
             const type = Number(field.get(YjsDatabaseKey.type));
 
-            if (type === FieldType.DateTime) {
-              const { data, endTimestamp, isRange } = dateFilterFillData(filter);
-
-              if (data !== null) {
-                cell.set(YjsDatabaseKey.data, data);
-              }
-
-              if (endTimestamp) {
-                cell.set(YjsDatabaseKey.end_timestamp, endTimestamp);
-              }
-
-              if (isRange) {
-                cell.set(YjsDatabaseKey.is_range, isRange);
-              }
-            } else if ([FieldType.CreatedTime, FieldType.LastEditedTime].includes(type)) {
+            if (
+              (isCalendar && calendarSetting?.fieldId === fieldId) ||
+              [FieldType.CreatedTime, FieldType.LastEditedTime].includes(type)
+            ) {
               shouldOpenRowModal = true;
-              return;
-            } else {
-              const data = filterFillData(filter, field);
-
-              if (data === null) {
-                return;
-              }
-
-              cell.set(YjsDatabaseKey.data, data);
             }
-
-            cell.set(YjsDatabaseKey.created_at, String(dayjs().unix()));
-            cell.set(YjsDatabaseKey.field_type, type);
-
-            cells.set(fieldId, cell);
           });
         }
 
