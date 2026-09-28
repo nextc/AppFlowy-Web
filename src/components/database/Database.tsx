@@ -33,6 +33,9 @@ import { CalendarViewType } from '@/components/database/fullcalendar/types';
 import { DatabaseContextProvider } from './DatabaseContext';
 
 const PRIORITY_ROW_SEED_LIMIT = 200;
+// MAGIC: ~100ms coalesces a board's burst of row-doc loads into a few renders
+// while staying below the delay users notice for cards filling in.
+const ROW_MAP_FLUSH_MS = 100;
 
 export interface Database2Props {
   workspaceId: string;
@@ -148,6 +151,8 @@ function Database(props: Database2Props) {
 
   const [rowMap, setRowMap] = useState<Record<RowId, YDoc>>({});
   const rowMapRef = useRef(rowMap);
+  const pendingRowMapRef = useRef<Record<RowId, YDoc>>({});
+  const rowMapFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRowDocsRef = useRef<Map<RowId, Promise<YDoc | undefined>>>(new Map());
   const prefetchPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const blobPrefetchPromiseRef = useRef<Promise<void> | null>(null);
@@ -156,8 +161,40 @@ function Database(props: Database2Props) {
   const [blobPrefetchComplete, setBlobPrefetchComplete] = useState(false);
 
   useEffect(() => {
-    rowMapRef.current = rowMap;
+    // ORDER: keep queued-but-unflushed docs visible to ensureRow/populateRowFromCache,
+    // otherwise a row could be created twice between enqueue and flush.
+    rowMapRef.current = { ...rowMap, ...pendingRowMapRef.current };
   }, [rowMap]);
+
+  // Row docs resolve one by one; a setRowMap per row re-groups the whole board and
+  // re-renders every card each time, which janks scrolling until loading finishes.
+  const enqueueRowDoc = useCallback((rowId: RowId, rowDoc: YDoc) => {
+    if (rowMapRef.current[rowId]) return;
+
+    rowMapRef.current = { ...rowMapRef.current, [rowId]: rowDoc };
+    pendingRowMapRef.current = { ...pendingRowMapRef.current, [rowId]: rowDoc };
+
+    if (rowMapFlushTimerRef.current) return;
+
+    rowMapFlushTimerRef.current = setTimeout(() => {
+      rowMapFlushTimerRef.current = null;
+      const pending = pendingRowMapRef.current;
+
+      pendingRowMapRef.current = {};
+      setRowMap((prev) => {
+        const additions = Object.entries(pending).filter(([id]) => !prev[id]);
+
+        if (additions.length === 0) return prev;
+        return { ...prev, ...Object.fromEntries(additions) };
+      });
+    }, ROW_MAP_FLUSH_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rowMapFlushTimerRef.current) clearTimeout(rowMapFlushTimerRef.current);
+    };
+  }, []);
 
   // Get the actual database ID from the Yjs doc, falling back to doc.guid
   // This is critical because doc.guid might be the view ID instead of the database ID
@@ -252,10 +289,7 @@ function Database(props: Database2Props) {
         const rowDoc = await promise;
 
         if (rowDoc) {
-          setRowMap((prev) => {
-            if (prev[rowId]) return prev;
-            return { ...prev, [rowId]: rowDoc };
-          });
+          enqueueRowDoc(rowId, rowDoc);
         }
 
         return rowDoc;
@@ -263,7 +297,7 @@ function Database(props: Database2Props) {
         pendingRowDocsRef.current.delete(rowId);
       }
     },
-    [getDatabaseId]
+    [getDatabaseId, enqueueRowDoc]
   );
 
   const ensureBlobPrefetch = useCallback(() => {
@@ -392,10 +426,7 @@ function Database(props: Database2Props) {
         const rowDoc = await promise;
 
         if (rowDoc) {
-          setRowMap((prev) => {
-            if (prev[rowId]) return prev;
-            return { ...prev, [rowId]: rowDoc };
-          });
+          enqueueRowDoc(rowId, rowDoc);
         }
 
         return rowDoc;
@@ -403,11 +434,17 @@ function Database(props: Database2Props) {
         pendingRowDocsRef.current.delete(rowId);
       }
     },
-    [createRow, getDatabaseId, ensureBlobPrefetch, registerRowSync]
+    [createRow, getDatabaseId, ensureBlobPrefetch, registerRowSync, enqueueRowDoc]
   );
 
   useEffect(() => {
     rowMapRef.current = {};
+    pendingRowMapRef.current = {};
+    if (rowMapFlushTimerRef.current) {
+      clearTimeout(rowMapFlushTimerRef.current);
+      rowMapFlushTimerRef.current = null;
+    }
+
     pendingRowDocsRef.current.clear();
     blobPrefetchPromiseRef.current = null;
     localCachePrimedRef.current = false;
