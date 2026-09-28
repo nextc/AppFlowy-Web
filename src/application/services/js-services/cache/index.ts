@@ -448,6 +448,7 @@ let rowSyncLogCount = 0;
 let rowFastLogCount = 0;
 
 const rowDocs = new Map<string, RowDocEntry>();
+const pendingRowDocEntries = new Map<string, Promise<RowDocEntry>>();
 
 async function getOrCreateRowDocEntry(rowKey: string): Promise<RowDocEntry> {
   const existing = rowDocs.get(rowKey);
@@ -460,6 +461,22 @@ async function getOrCreateRowDocEntry(rowKey: string): Promise<RowDocEntry> {
     return existing;
   }
 
+  // ORDER: concurrent callers (board cache load via createRowFast and a mounting card's
+  // createRow sync bind) must share one open; otherwise each gets its own Y.Doc, sync is
+  // registered on one while the UI edits the other, and edits never reach the server.
+  const pending = pendingRowDocEntries.get(rowKey);
+
+  if (pending) return pending;
+
+  const promise = openRowDocEntry(rowKey).finally(() => {
+    pendingRowDocEntries.delete(rowKey);
+  });
+
+  pendingRowDocEntries.set(rowKey, promise);
+  return promise;
+}
+
+async function openRowDocEntry(rowKey: string): Promise<RowDocEntry> {
   Log.debug('[Database] getOrCreateRowDocEntry creating new entry', {
     rowKey,
   });
