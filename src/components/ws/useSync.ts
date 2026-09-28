@@ -85,7 +85,11 @@ export const useSync = (ws: AppflowyWebSocketType, bc: BroadcastChannelType, eve
 
     Log.debug('Received collab message:', wsCollabMessage.collabType, publishedAt, wsCollabMessage);
 
-    setLastUpdatedCollab({ objectId, publishedAt, collabType: wsCollabMessage.collabType as Types });
+    // EXTERNAL: only AppBusinessLayer reads lastUpdatedCollab, and only for Folder; publishing
+    // every row/doc message changed the app-wide sync context per message and re-rendered the app.
+    if (wsCollabMessage.collabType === Types.Folder) {
+      setLastUpdatedCollab({ objectId, publishedAt, collabType: Types.Folder });
+    }
   }, [wsCollabMessage]);
 
   useEffect(() => {
@@ -103,7 +107,11 @@ export const useSync = (ws: AppflowyWebSocketType, bc: BroadcastChannelType, eve
 
     Log.debug('Received broadcasted collab message:', bcCollabMessage.collabType, publishedAt, bcCollabMessage);
 
-    setLastUpdatedCollab({ objectId, publishedAt, collabType: bcCollabMessage.collabType as Types });
+    // EXTERNAL: only AppBusinessLayer reads lastUpdatedCollab, and only for Folder; publishing
+    // every row/doc message changed the app-wide sync context per message and re-rendered the app.
+    if (bcCollabMessage.collabType === Types.Folder) {
+      setLastUpdatedCollab({ objectId, publishedAt, collabType: Types.Folder });
+    }
   }, [bcCollabMessage]);
 
   // Handle workspace notifications from WebSocket

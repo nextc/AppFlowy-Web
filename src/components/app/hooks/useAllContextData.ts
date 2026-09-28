@@ -37,5 +37,5 @@ export function useAllContextData(awarenessMap: Record<string, Awareness>): AppC
     loadView: businessData?.loadView || (async () => { 
       throw new Error('No workspace selected'); 
     }),
-  }), [authData, syncData, businessData, awarenessMap]);
+  }), [authData, syncData?.eventEmitter, businessData, awarenessMap]);
 }

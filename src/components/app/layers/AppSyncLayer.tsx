@@ -286,10 +286,11 @@ export const AppSyncLayer: React.FC<AppSyncLayerProps> = ({ children }) => {
   }, [isAuthenticated, currentWorkspaceId, service]);
 
   // Context value for synchronization layer
+  // webSocket/broadcastChannel are deliberately NOT exposed: they change on every
+  // message, and a per-message context change synchronously re-rendered the whole app
+  // (react-use-websocket applies each message via flushSync).
   const syncContextValue: SyncInternalContextType = useMemo(
     () => ({
-      webSocket,
-      broadcastChannel,
       registerSyncContext,
       eventEmitter: eventEmitterRef.current,
       awarenessMap,
@@ -297,7 +298,7 @@ export const AppSyncLayer: React.FC<AppSyncLayerProps> = ({ children }) => {
       flushAllSync,
       syncAllToServer,
     }),
-    [webSocket, broadcastChannel, registerSyncContext, awarenessMap, lastUpdatedCollab, flushAllSync, syncAllToServer]
+    [registerSyncContext, awarenessMap, lastUpdatedCollab, flushAllSync, syncAllToServer]
   );
 
   return <SyncInternalContext.Provider value={syncContextValue}>{children}</SyncInternalContext.Provider>;
