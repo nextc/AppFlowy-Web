@@ -42,7 +42,6 @@ import { getOptionsFromRow, initialDatabaseRow } from '@/application/database-yj
 import { generateRowMeta, getMetaIdMap, getMetaJSON, getRowKey } from '@/application/database-yjs/row_meta';
 import { useBoardLayoutSettings, useCalendarLayoutSetting, useDatabaseViewLayout, useFieldSelector, useFieldType } from '@/application/database-yjs/selector';
 import { executeOperations } from '@/application/slate-yjs/utils/yjs';
-import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import {
   DatabaseViewLayout,
   DateFormat,
@@ -76,11 +75,13 @@ import {
   YjsDatabaseKey,
   YjsEditorKey,
   YMapFieldTypeOption,
+  YDoc,
   YSharedRoot,
 } from '@/application/types';
 import { DefaultTimeSetting } from '@/application/user-metadata';
 import { isDatabaseContainer } from '@/application/view-utils';
 import { applyYDoc } from '@/application/ydoc/apply';
+import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
 import { Log } from '@/utils/log';
 
 export function useResizeColumnWidthDispatch() {
@@ -590,10 +591,96 @@ export function useReorderRowDispatch() {
   );
 }
 
+// MAGIC: long enough for a row doc to fill from IndexedDB or the server on a slow link;
+// past this the edit is logged and dropped rather than applied to a doc that may never fill.
+const ROW_DATA_READY_TIMEOUT_MS = 15000;
+
+function hasRowData(rowDoc: YDoc): boolean {
+  return (rowDoc.getMap(YjsEditorKey.data_section) as YSharedRoot).has(YjsEditorKey.database_row);
+}
+
+function waitForRowData(rowDoc: YDoc): Promise<boolean> {
+  if (hasRowData(rowDoc)) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const onUpdate = () => {
+      if (hasRowData(rowDoc)) finish(true);
+    };
+
+    const timer = setTimeout(() => finish(false), ROW_DATA_READY_TIMEOUT_MS);
+
+    function finish(ready: boolean) {
+      clearTimeout(timer);
+      rowDoc.off('update', onUpdate);
+      resolve(ready);
+    }
+
+    rowDoc.on('update', onUpdate);
+  });
+}
+
+/**
+ * Resolves a row's Y.Doc with its row data present. While a board is still hydrating,
+ * rows are not in rowMap yet (cards render "Untitled"), and a freshly opened doc can be
+ * empty until IndexedDB/server sync fills it — so load on demand and wait for the data.
+ */
+function useResolveRowDoc() {
+  const rowMap = useRowMap();
+  const { ensureRow } = useDatabaseContext();
+
+  return useCallback(
+    async (rowId: string): Promise<YDoc | undefined> => {
+      const rowDoc = rowMap?.[rowId] ?? (await ensureRow?.(rowId)) ?? undefined;
+
+      if (!rowDoc) {
+        Log.warn('[useResolveRowDoc] Row doc could not be loaded', { rowId });
+        return undefined;
+      }
+
+      if (!(await waitForRowData(rowDoc))) {
+        Log.warn('[useResolveRowDoc] Row doc loaded but row data never arrived', { rowId });
+        return undefined;
+      }
+
+      return rowDoc;
+    },
+    [rowMap, ensureRow]
+  );
+}
+
+/**
+ * Runs `apply` with the row's Y.Doc: synchronously when it is already loaded, otherwise
+ * after loading it, instead of silently dropping edits made while the board hydrates.
+ */
+function useWithRowDoc() {
+  const rowMap = useRowMap();
+  const resolveRowDoc = useResolveRowDoc();
+
+  return useCallback(
+    (rowId: string, apply: (rowDoc: YDoc) => void) => {
+      const rowDoc = rowMap?.[rowId];
+
+      if (rowDoc && hasRowData(rowDoc)) {
+        apply(rowDoc);
+        return;
+      }
+
+      resolveRowDoc(rowId)
+        .then((loaded) => {
+          if (loaded) apply(loaded);
+        })
+        .catch((error: unknown) => {
+          Log.warn('[useWithRowDoc] Failed to apply deferred row edit', { rowId, error });
+        });
+    },
+    [rowMap, resolveRowDoc]
+  );
+}
+
 export function useMoveCardDispatch() {
   const view = useDatabaseView();
   const sharedRoot = useSharedRoot();
-  const rowMap = useRowMap();
+  const withRowDoc = useWithRowDoc();
   const database = useDatabase();
 
   return useCallback(
@@ -610,7 +697,7 @@ export function useMoveCardDispatch() {
       startColumnId: string;
       finishColumnId: string;
     }) => {
-      executeOperations(
+      withRowDoc(rowId, (rowDoc) => executeOperations(
         sharedRoot,
         [
           () => {
@@ -622,13 +709,12 @@ export function useMoveCardDispatch() {
 
             const fieldType = Number(field.get(YjsDatabaseKey.type));
 
-            const rowDoc = rowMap?.[rowId];
-
-            if (!rowDoc) {
-              throw new Error(`Unable to reorder card`);
-            }
-
             const row = rowDoc.getMap(YjsEditorKey.data_section).get(YjsEditorKey.database_row) as YDatabaseRow;
+
+            if (!row) {
+              Log.warn('[useMoveCardDispatch] Row data not found', { rowId });
+              return;
+            }
 
             const cells = row.get(YjsDatabaseKey.cells);
             const isSelectOptionField = [FieldType.SingleSelect, FieldType.MultiSelect].includes(fieldType);
@@ -671,9 +757,9 @@ export function useMoveCardDispatch() {
           },
         ],
         'reorderCard'
-      );
+      ));
     },
-    [database, rowMap, sharedRoot, view]
+    [database, withRowDoc, sharedRoot, view]
   );
 }
 
@@ -1505,11 +1591,11 @@ export function useDuplicateRowDispatch() {
   const sharedRoot = useSharedRoot();
   const createRow = useCreateRow();
   const guid = useDocGuid();
-  const rowMap = useRowMap();
+  const resolveRowDoc = useResolveRowDoc();
 
   return useCallback(
     async (referenceRowId: string) => {
-      const referenceRowDoc = rowMap?.[referenceRowId];
+      const referenceRowDoc = await resolveRowDoc(referenceRowId);
 
       if (!referenceRowDoc) {
         throw new Error(`Row not found`);
@@ -1609,7 +1695,7 @@ export function useDuplicateRowDispatch() {
 
       return rowId;
     },
-    [createRow, database, guid, rowMap, sharedRoot]
+    [createRow, database, guid, resolveRowDoc, sharedRoot]
   );
 }
 
@@ -1970,40 +2056,41 @@ export function useDuplicatePropertyDispatch() {
 }
 
 export function useUpdateRowMetaDispatch(rowId: string) {
-  const rowMap = useRowMap();
-
-  const rowDoc = rowMap?.[rowId];
+  const withRowDoc = useWithRowDoc();
 
   return useCallback(
     (key: RowMetaKey, value?: string | boolean) => {
-      if (!rowDoc) {
-        throw new Error(`Row not found`);
-      }
+      withRowDoc(rowId, (rowDoc) => {
+        const rowSharedRoot = rowDoc.getMap(YjsEditorKey.data_section) as YSharedRoot;
+        const meta = rowSharedRoot.get(YjsEditorKey.meta);
 
-      const rowSharedRoot = rowDoc.getMap(YjsEditorKey.data_section) as YSharedRoot;
-      const meta = rowSharedRoot.get(YjsEditorKey.meta);
-
-      const keyId = getMetaIdMap(rowId).get(key);
-
-      if (!keyId) {
-        throw new Error(`Meta key not found: ${key}`);
-      }
-
-      const isDifferent = meta.get(keyId) !== value;
-
-      if (!isDifferent) {
-        return;
-      }
-
-      rowDoc.transact(() => {
-        if (value === undefined) {
-          meta.delete(keyId);
-        } else {
-          meta.set(keyId, value);
+        if (!meta) {
+          Log.warn('[useUpdateRowMetaDispatch] Row meta not found', { rowId, key });
+          return;
         }
+
+        const keyId = getMetaIdMap(rowId).get(key);
+
+        if (!keyId) {
+          throw new Error(`Meta key not found: ${key}`);
+        }
+
+        const isDifferent = meta.get(keyId) !== value;
+
+        if (!isDifferent) {
+          return;
+        }
+
+        rowDoc.transact(() => {
+          if (value === undefined) {
+            meta.delete(keyId);
+          } else {
+            meta.set(keyId, value);
+          }
+        });
       });
     },
-    [rowDoc, rowId]
+    [withRowDoc, rowId]
   );
 }
 
@@ -2038,7 +2125,7 @@ function updateDateCell(
 }
 
 export function useUpdateCellDispatch(rowId: string, fieldId: string) {
-  const rowMap = useRowMap();
+  const withRowDoc = useWithRowDoc();
   const { field } = useFieldSelector(fieldId);
 
   return useCallback(
@@ -2051,112 +2138,107 @@ export function useUpdateCellDispatch(rowId: string, fieldId: string) {
         reminderId?: string;
       }
     ) => {
-      const rowDoc = rowMap?.[rowId];
+      withRowDoc(rowId, (rowDoc) => {
+        const rowSharedRoot = rowDoc.getMap(YjsEditorKey.data_section) as YSharedRoot;
+        const row = rowSharedRoot.get(YjsEditorKey.database_row);
 
-      if (!rowDoc) {
-        Log.warn('[useUpdateCellDispatch] Row doc not found', { rowId, fieldId });
-        return;
-      }
-
-      const rowSharedRoot = rowDoc.getMap(YjsEditorKey.data_section) as YSharedRoot;
-      const row = rowSharedRoot.get(YjsEditorKey.database_row);
-
-      if (!row) {
-        Log.warn('[useUpdateCellDispatch] Row data not found', { rowId, fieldId });
-        return;
-      }
-
-      const cells = row.get(YjsDatabaseKey.cells);
-
-      if (!cells) {
-        Log.warn('[useUpdateCellDispatch] Row cells not found', { rowId, fieldId });
-        return;
-      }
-
-      const cell = cells.get(fieldId);
-
-      const type = Number(field.get(YjsDatabaseKey.type));
-
-      rowDoc.transact(() => {
-        if (!cell) {
-          const newCell = new Y.Map() as YDatabaseCell;
-
-          newCell.set(YjsDatabaseKey.created_at, String(dayjs().unix()));
-          newCell.set(YjsDatabaseKey.field_type, type);
-          newCell.set(YjsDatabaseKey.data, data);
-          newCell.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
-
-          if (dateOpts && (typeof data === 'string' || typeof data === 'number')) {
-            updateDateCell(newCell, {
-              data,
-              ...dateOpts,
-            });
-          }
-
-          cells.set(fieldId, newCell);
-        } else {
-          cell.set(YjsDatabaseKey.data, data);
-
-          if (dateOpts && (typeof data === 'string' || typeof data === 'number')) {
-            updateDateCell(cell, {
-              data,
-              ...dateOpts,
-            });
-          }
-
-          cell.set(YjsDatabaseKey.field_type, type);
-          cell.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
+        if (!row) {
+          Log.warn('[useUpdateCellDispatch] Row data not found', { rowId, fieldId });
+          return;
         }
 
-        row.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
+        const cells = row.get(YjsDatabaseKey.cells);
+
+        if (!cells) {
+          Log.warn('[useUpdateCellDispatch] Row cells not found', { rowId, fieldId });
+          return;
+        }
+
+        const cell = cells.get(fieldId);
+
+        const type = Number(field.get(YjsDatabaseKey.type));
+
+        rowDoc.transact(() => {
+          if (!cell) {
+            const newCell = new Y.Map() as YDatabaseCell;
+
+            newCell.set(YjsDatabaseKey.created_at, String(dayjs().unix()));
+            newCell.set(YjsDatabaseKey.field_type, type);
+            newCell.set(YjsDatabaseKey.data, data);
+            newCell.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
+
+            if (dateOpts && (typeof data === 'string' || typeof data === 'number')) {
+              updateDateCell(newCell, {
+                data,
+                ...dateOpts,
+              });
+            }
+
+            cells.set(fieldId, newCell);
+          } else {
+            cell.set(YjsDatabaseKey.data, data);
+
+            if (dateOpts && (typeof data === 'string' || typeof data === 'number')) {
+              updateDateCell(cell, {
+                data,
+                ...dateOpts,
+              });
+            }
+
+            cell.set(YjsDatabaseKey.field_type, type);
+            cell.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
+          }
+
+          row.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
+        });
       });
     },
-    [field, fieldId, rowMap, rowId]
+    [field, fieldId, withRowDoc, rowId]
   );
 }
 
 export function useUpdateStartEndTimeCell() {
-  const rowMap = useRowMap();
+  const withRowDoc = useWithRowDoc();
 
   return useCallback(
     (rowId: string, fieldId: string, startTimestamp: string, endTimestamp?: string, isAllDay?: boolean) => {
-      const rowDoc = rowMap?.[rowId];
+      withRowDoc(rowId, (rowDoc) => {
+        const rowSharedRoot = rowDoc.getMap(YjsEditorKey.data_section) as YSharedRoot;
+        const row = rowSharedRoot.get(YjsEditorKey.database_row);
 
-      if (!rowDoc) {
-        throw new Error(`Row not found`);
-      }
-
-      const rowSharedRoot = rowDoc.getMap(YjsEditorKey.data_section) as YSharedRoot;
-      const row = rowSharedRoot.get(YjsEditorKey.database_row);
-
-      const cells = row.get(YjsDatabaseKey.cells);
-
-      rowDoc.transact(() => {
-        let cell = cells.get(fieldId);
-
-        if (!cell) {
-          cell = new Y.Map() as YDatabaseCell;
-          cell.set(YjsDatabaseKey.field_type, FieldType.DateTime);
-
-          cell.set(YjsDatabaseKey.created_at, String(dayjs().unix()));
-          cells.set(fieldId, cell);
+        if (!row) {
+          Log.warn('[useUpdateStartEndTimeCell] Row data not found', { rowId, fieldId });
+          return;
         }
 
+        const cells = row.get(YjsDatabaseKey.cells);
 
-        cell.set(YjsDatabaseKey.data, startTimestamp);
-        cell.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
+        rowDoc.transact(() => {
+          let cell = cells.get(fieldId);
 
-        updateDateCell(cell, {
-          data: startTimestamp,
-          endTimestamp,
-          isRange: !!endTimestamp,
-          includeTime: !isAllDay,
+          if (!cell) {
+            cell = new Y.Map() as YDatabaseCell;
+            cell.set(YjsDatabaseKey.field_type, FieldType.DateTime);
+
+            cell.set(YjsDatabaseKey.created_at, String(dayjs().unix()));
+            cells.set(fieldId, cell);
+          }
+
+
+          cell.set(YjsDatabaseKey.data, startTimestamp);
+          cell.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
+
+          updateDateCell(cell, {
+            data: startTimestamp,
+            endTimestamp,
+            isRange: !!endTimestamp,
+            includeTime: !isAllDay,
+          });
+          row.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
         });
-        row.set(YjsDatabaseKey.last_modified, String(dayjs().unix()));
       });
-
     },
-    [rowMap]
+    [withRowDoc]
   );
 }
 
