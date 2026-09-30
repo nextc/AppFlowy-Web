@@ -139,8 +139,10 @@ export function usePageOperations({
         throw new Error('No workspace or service found');
       }
 
-      if (role === Role.Guest) {
-        throw new Error('Guest cannot move pages');
+      // SECURITY: moving pages is Owner-only; Members may edit but not move (mirrors server guard).
+      if (role !== Role.Owner) {
+        toast.error('Only workspace owners can move pages');
+        throw new Error('Only workspace owners can move pages');
       }
 
       try {

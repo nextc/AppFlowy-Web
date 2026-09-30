@@ -13,6 +13,7 @@ import { ReactComponent as ExpandIcon } from '@/assets/icons/full_screen.svg';
 import { findAncestors, findView } from '@/components/_shared/outline/utils';
 import SpaceIcon from '@/components/_shared/view-icon/SpaceIcon';
 import { useAppHandlers, useAppOutline, useCurrentWorkspaceId } from '@/components/app/app.hooks';
+import { useCanMoveContent } from '@/components/app/contexts/AuthInternalContext';
 import DatabaseView from '@/components/app/DatabaseView';
 import MoreActions from '@/components/app/header/MoreActions';
 import { useViewOperations, YDocWithMeta } from '@/components/app/hooks/useViewOperations';
@@ -238,6 +239,7 @@ function ViewModal({ viewId, open, onClose }: { viewId?: string; open: boolean; 
 
   const ref = useRef<HTMLDivElement | null>(null);
   const [movePageOpen, setMovePageOpen] = useState(false);
+  const canMove = useCanMoveContent();
 
   const renderModalTitle = useCallback(() => {
     if (!effectiveViewId) return null;
@@ -260,7 +262,7 @@ function ViewModal({ viewId, open, onClose }: { viewId?: string; open: boolean; 
             </IconButton>
           </Tooltip>
           <Divider orientation={'vertical'} className={'h-4'} />
-          {space && ref.current && (
+          {space && ref.current && canMove && (
             <MovePagePopover
               viewId={effectiveViewId}
               open={movePageOpen}
@@ -286,6 +288,22 @@ function ViewModal({ viewId, open, onClose }: { viewId?: string; open: boolean; 
               </Button>
             </MovePagePopover>
           )}
+          {space && ref.current && !canMove && (
+            <Button
+              size={'small'}
+              startIcon={
+                <SpaceIcon
+                  bgColor={space.extra?.space_icon_color}
+                  value={space.extra?.space_icon || ''}
+                  char={space.extra?.space_icon ? undefined : space.name.slice(0, 1)}
+                />
+              }
+              color={'inherit'}
+              className={'justify-start px-1.5'}
+            >
+              {space.name}
+            </Button>
+          )}
         </div>
 
         <div className={'flex items-center gap-4'}>
@@ -309,7 +327,7 @@ function ViewModal({ viewId, open, onClose }: { viewId?: string; open: boolean; 
         </div>
       </div>
     );
-  }, [effectiveViewId, handleClose, movePageOpen, outline, t, toView]);
+  }, [canMove, effectiveViewId, handleClose, movePageOpen, outline, t, toView]);
 
   // Check if view is in shareWithMe and determine readonly status
   const isReadOnly = useMemo(() => {

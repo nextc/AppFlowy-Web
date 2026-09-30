@@ -10,7 +10,7 @@ import { ReactComponent as MoveToIcon } from '@/assets/icons/move_to.svg';
 import { findView } from '@/components/_shared/outline/utils';
 import { useAppOverlayContext } from '@/components/app/app-overlay/AppOverlayContext';
 import { useAppHandlers, useAppOutline, useAppView, useCurrentWorkspaceId } from '@/components/app/app.hooks';
-import { useCanDeleteContent } from '@/components/app/contexts/AuthInternalContext';
+import { useCanDeleteContent, useCanMoveContent } from '@/components/app/contexts/AuthInternalContext';
 import { useSyncInternal } from '@/components/app/contexts/SyncInternalContext';
 import MovePagePopover from '@/components/app/view-actions/MovePagePopover';
 import { useService } from '@/components/main/app.hooks';
@@ -24,6 +24,7 @@ function MoreActionsContent({ itemClicked, viewId }: {
 }) {
   const { t } = useTranslation();
   const canDelete = useCanDeleteContent();
+  const canMove = useCanMoveContent();
   const {
     openDeleteModal,
     showBlockingLoader,
@@ -85,7 +86,7 @@ function MoreActionsContent({ itemClicked, viewId }: {
         <DuplicateIcon />
         {t('button.duplicate')}
       </DropdownMenuItem>
-      {container && <MovePagePopover
+      {container && canMove && <MovePagePopover
         viewId={viewId}
         onMoved={itemClicked}
         popoverContentProps={{

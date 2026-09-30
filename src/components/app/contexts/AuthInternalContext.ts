@@ -39,3 +39,15 @@ export function useCanDeleteContent(): boolean {
 
   return context?.userWorkspaceInfo?.selectedWorkspace?.role === Role.Owner;
 }
+
+/**
+ * Whether the current user may MOVE pages between spaces/parents.
+ *
+ * SECURITY: moving pages is Owner-only; Members may edit but not reorganize the
+ * workspace. Mirrors the Owner enforcement on the server's move-page endpoint.
+ */
+export function useCanMoveContent(): boolean {
+  const context = useContext(AuthInternalContext);
+
+  return context?.userWorkspaceInfo?.selectedWorkspace?.role === Role.Owner;
+}
