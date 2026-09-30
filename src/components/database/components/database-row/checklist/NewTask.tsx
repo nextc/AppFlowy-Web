@@ -40,6 +40,11 @@ function NewTask({
             variant={'ghost'}
             autoFocus
             onBlur={() => {
+              // Clicking away used to silently discard the typed task; keep it instead.
+              if (value.trim()) {
+                onCreateTask(value);
+              }
+
               setShowCreateInput(false);
             }}
             className={'w-full rounded-none p-0 text-text-primary'}
