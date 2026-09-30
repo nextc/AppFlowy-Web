@@ -121,7 +121,9 @@ export function isLinkedDatabaseViewUnderDocument(
   view: View | null | undefined,
   parentView: View | null | undefined
 ): boolean {
-  if (!parentView || !view) {
+  // ASSUMPTION: spaces are stored as Document-layout views flagged is_space; a database
+  // placed directly in a space is a sidebar page, not a view embedded in document content.
+  if (!parentView || !view || parentView.extra?.is_space) {
     return false;
   }
 

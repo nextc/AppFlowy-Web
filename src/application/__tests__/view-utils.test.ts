@@ -664,6 +664,21 @@ describe('view-utils', () => {
       expect(isLinkedDatabaseViewUnderDocument(view, parentView)).toBe(false);
     });
 
+    it('returns false for database view directly under a space', () => {
+      const view = createMockView({
+        view_id: 'board-view',
+        layout: ViewLayout.Board,
+      });
+      const parentView = createMockView({
+        view_id: 'space',
+        layout: ViewLayout.Document,
+        extra: { is_space: true },
+      });
+
+      expect(isLinkedDatabaseViewUnderDocument(view, parentView)).toBe(false);
+      expect(canBeMoved(view, parentView)).toBe(true);
+    });
+
     it('returns false for document view under document', () => {
       const view = createMockView({
         view_id: 'child-doc',
